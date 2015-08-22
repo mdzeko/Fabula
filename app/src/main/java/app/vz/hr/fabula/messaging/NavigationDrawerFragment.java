@@ -1,6 +1,5 @@
-package app.vz.hr.fabula;
+package app.vz.hr.fabula.messaging;
 
-import android.support.v7.app.ActionBarActivity;
 import android.app.Activity;
 import android.support.v7.app.ActionBar;
 import android.support.v4.app.Fragment;
@@ -11,6 +10,7 @@ import android.content.res.Configuration;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v7.app.ActionBarDrawerToggle;
+import android.support.v7.app.AppCompatActivity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -22,13 +22,25 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import com.couchbase.lite.CouchbaseLiteException;
+import com.couchbase.lite.Database;
+import com.couchbase.lite.Manager;
+import com.couchbase.lite.QueryRow;
+import com.couchbase.lite.android.AndroidContext;
+
+import java.io.IOException;
+import java.util.List;
+
+import app.vz.hr.fabula.R;
+import app.vz.hr.fabula.util.Conversation;
+import app.vz.hr.fabula.util.GlobalUtil;
+
 /**
  * Fragment used for managing interactions for and presentation of a navigation drawer.
  * See the <a href="https://developer.android.com/design/patterns/navigation-drawer.html#Interaction">
  * design guidelines</a> for a complete explanation of the behaviors implemented here.
  */
 public class NavigationDrawerFragment extends Fragment {
-
     /**
      * Remember the position of the selected item.
      */
@@ -57,6 +69,10 @@ public class NavigationDrawerFragment extends Fragment {
     private int mCurrentSelectedPosition = 0;
     private boolean mFromSavedInstanceState;
     private boolean mUserLearnedDrawer;
+    List<QueryRow> conversationList;
+
+    com.couchbase.lite.Database database;
+    Manager manager;
 
     public NavigationDrawerFragment() {
     }
@@ -64,9 +80,9 @@ public class NavigationDrawerFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         // Read in the flag indicating whether or not the user has demonstrated awareness of the
         // drawer. See PREF_USER_LEARNED_DRAWER for details.
+
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
         mUserLearnedDrawer = sp.getBoolean(PREF_USER_LEARNED_DRAWER, false);
 
@@ -82,6 +98,26 @@ public class NavigationDrawerFragment extends Fragment {
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
+        mDrawerListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                selectItem(position);
+            }
+        });
+        if(getDatabaseInstance() != null)
+            conversationList = Conversation.getAllConversations(getDatabaseInstance());
+        String[] names = new String[conversationList.size()];
+        for (int i = 0; i < conversationList.size(); i++) {
+            QueryRow r = conversationList.get(i);
+            names[i] = r.getDocument().getProperty("name").toString();
+        }
+        //ContactListAdapter adapter = new ContactListAdapter(getActivity(), android.R.layout.simple_list_item_1, android.R.id.text1, conversationList);
+        mDrawerListView.setAdapter(new ArrayAdapter<>(
+                getActionBar().getThemedContext(),
+                android.R.layout.simple_list_item_1,
+                android.R.id.text1,
+                names));
+        mDrawerListView.setItemChecked(mCurrentSelectedPosition, true);
         // Indicate that this fragment would like to influence the set of actions in the action bar.
         setHasOptionsMenu(true);
     }
@@ -91,22 +127,6 @@ public class NavigationDrawerFragment extends Fragment {
                              Bundle savedInstanceState) {
         mDrawerListView = (ListView) inflater.inflate(
                 R.layout.fragment_navigation_drawer, container, false);
-        mDrawerListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                selectItem(position);
-            }
-        });
-        mDrawerListView.setAdapter(new ArrayAdapter<>(
-                getActionBar().getThemedContext(),
-                android.R.layout.simple_list_item_1,
-                android.R.id.text1,
-                new String[]{
-                        getString(R.string.title_section1),
-                        getString(R.string.title_section2),
-                        getString(R.string.title_section3),
-                }));
-        mDrawerListView.setItemChecked(mCurrentSelectedPosition, true);
         return mDrawerListView;
     }
 
@@ -197,7 +217,8 @@ public class NavigationDrawerFragment extends Fragment {
             mDrawerLayout.closeDrawer(mFragmentContainerView);
         }
         if (mCallbacks != null) {
-            mCallbacks.onNavigationDrawerItemSelected(position);
+            if(conversationList != null)
+            mCallbacks.onNavigationDrawerItemSelected(conversationList.get(position).getDocumentId());
         }
     }
 
@@ -267,7 +288,7 @@ public class NavigationDrawerFragment extends Fragment {
     }
 
     private ActionBar getActionBar() {
-        return ((ActionBarActivity) getActivity()).getSupportActionBar();
+        return ((AppCompatActivity) getActivity()).getSupportActionBar();
     }
 
     /**
@@ -277,6 +298,33 @@ public class NavigationDrawerFragment extends Fragment {
         /**
          * Called when an item in the navigation drawer is selected.
          */
-        void onNavigationDrawerItemSelected(int position);
+        void onNavigationDrawerItemSelected(String docID);
+    }
+
+    public Database getDatabaseInstance() {
+        if(this.manager == null){
+            getManagerInstance();
+        }
+        if (this.database == null) {
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
+            if(!sp.getString(GlobalUtil.DB_NAME_KEY, "miso").isEmpty())
+                try {
+                    this.database = manager.getDatabase(sp.getString(GlobalUtil.DB_NAME_KEY, "miso"));
+                } catch (CouchbaseLiteException e) {
+                    e.printStackTrace();
+                }
+        }
+        return database;
+    }
+    public Manager getManagerInstance(){
+        AndroidContext ctx = new AndroidContext(getActivity());
+        if (manager == null) {
+            try {
+                manager = new Manager(ctx, Manager.DEFAULT_OPTIONS);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return manager;
     }
 }
