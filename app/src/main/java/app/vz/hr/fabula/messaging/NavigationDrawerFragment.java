@@ -20,13 +20,16 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
-import android.widget.Toast;
 
 import com.couchbase.lite.Database;
 import com.couchbase.lite.LiveQuery;
 import com.couchbase.lite.Query;
 import com.couchbase.lite.QueryEnumerator;
 import com.couchbase.lite.QueryRow;
+import com.couchbase.lite.replicator.Replication;
+
+import java.net.MalformedURLException;
+import java.net.URL;
 
 import app.vz.hr.fabula.R;
 import app.vz.hr.fabula.util.Conversation;
@@ -102,7 +105,7 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
         int i = 0;
         while (rows.hasNext()){
             QueryRow r = rows.next();
-            names[i] = r.getKey().toString();
+            names[i] = r.getValue().toString().replace("[", "").replace("]", "");
         }
         if(names.length == 0)
             return;
@@ -205,18 +208,29 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
         Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity());
         if(db == null)
             return;
-        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        Query namesQuery = Conversation.getContactList(db, sp.getString(GlobalUtil.PHONE_NUM_KEY, "")).createQuery();
-        namesQuery.setGroupLevel(1);
-        liveNamesQ = namesQuery.toLiveQuery();
-        refreshAdapter(liveNamesQ.getRows());
-        liveNamesQ.addChangeListener(this);
-        mDrawerListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                selectItem(position);
+        try {
+            URL remote = new URL("http://dzeko.iriscouch.com/" + getString(R.string.app_name).toLowerCase());
+            Replication pull = db.getActiveReplicator(remote, false);
+            if(pull == null) {
+                pull = db.createPullReplication(remote);
+                pull.setContinuous(true);
+                pull.start();
             }
-        });
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
+            Query namesQuery = Conversation.getContactList(db, sp.getString(GlobalUtil.PHONE_NUM_KEY, "")).createQuery();
+            namesQuery.setGroupLevel(1);
+            liveNamesQ = namesQuery.toLiveQuery();
+            refreshAdapter(liveNamesQ.getRows());
+            liveNamesQ.addChangeListener(this);
+            mDrawerListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+                @Override
+                public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                    selectItem(position);
+                }
+            });
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        }
     }
 
     private void selectItem(int position) {
@@ -279,10 +293,9 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
             return true;
         }
 
-        if (item.getItemId() == R.id.action_example) {
-            Toast.makeText(getActivity(), "Example action.", Toast.LENGTH_SHORT).show();
+        /*if (item.getItemId() == R.id.action_example) {
             return true;
-        }
+        }*/
 
         return super.onOptionsItemSelected(item);
     }

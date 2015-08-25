@@ -25,9 +25,10 @@ import com.couchbase.lite.replicator.Replication;
 
 import java.io.IOException;
 import java.net.URL;
-import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import app.vz.hr.fabula.R;
@@ -95,13 +96,17 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
             Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity());
             URL remote = new URL("http://dzeko.iriscouch.com/" + getString(R.string.app_name).toLowerCase());
             Replication push = db.createPushReplication(remote);
-            Replication pull = db.createPullReplication(remote);
             push.setContinuous(true);
-            pull.setContinuous(true);
+            Replication pull = db.getActiveReplicator(remote, false);
+            if(pull == null) {
+                pull = db.createPullReplication(remote);
+                pull.setContinuous(true);
+                pull.start();
+            }
             push.start();
-            pull.start();
             Query messagesQuery = Conversation.getMessages(db, phone, sp.getString(GlobalUtil.PHONE_NUM_KEY, "")).createQuery();
             messagesQuery.setLimit(300);
+            messagesQuery.setDescending(false);
             liveMessages = messagesQuery.toLiveQuery();
             attachMessages(liveMessages.getRows());
             liveMessages.addChangeListener(this);
@@ -133,6 +138,7 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
 
     @Override
     public void changed(final LiveQuery.ChangeEvent event) {
+        if(liveMessages != null)
         if(event.getSource().equals(this.liveMessages))
         getActivity().runOnUiThread(new Runnable() {
             @Override
@@ -163,10 +169,12 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
         Map<String, Object> properties = new HashMap<>();
         properties.put("to", phone);
         properties.put("from", sp.getString(GlobalUtil.PHONE_NUM_KEY, ""));
-        String current = DateFormat.getDateTimeInstance(DateFormat.DEFAULT, DateFormat.FULL).format(new Date());
+        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.ROOT);
+        String current = sdf.format(new Date());
         properties.put("datetime", current);
         properties.put("message", edtMessage.getText().toString());
         properties.put("name", sp.getString(GlobalUtil.USER_NAME_KEY, null));
+        properties.put("timestamp", System.currentTimeMillis() / 1000L);
         try {
             doc.putProperties(properties);
         } catch (CouchbaseLiteException e) {

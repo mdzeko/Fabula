@@ -1,13 +1,18 @@
 package app.vz.hr.fabula.messaging;
 
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
+import android.telephony.PhoneNumberUtils;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.EditText;
 
 import app.vz.hr.fabula.R;
 import app.vz.hr.fabula.UserPreferenceActivity;
@@ -92,8 +97,50 @@ public class ChatWindow extends AppCompatActivity
         if (id == R.id.action_settings) {
             startActivity(new Intent(this, UserPreferenceActivity.class));
         }
+        else if (id == R.id.action_new_conversation) {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            final View dialogView = getLayoutInflater().inflate(R.layout.new_conversation_dialog, null);
+            builder.setView(dialogView);
+            builder.setCancelable(true);
+            builder.setPositiveButton(R.string.create, new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    EditText etPhone = (EditText) dialogView.findViewById(R.id.new_conversation_phone);
+                    if (!etPhone.getText().toString().isEmpty() && PhoneNumberUtils.isGlobalPhoneNumber(etPhone.getText().toString()))
+                        addConversation(etPhone.getText().toString());
+                }
+            });
+            builder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                }
+            });
+            AlertDialog dialog = builder.create();
+            dialog.show();
+        }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    private void addConversation(String phone) {
+        onNavigationDrawerItemSelected(phone, phone);
+        /*Database db = DBUtil.getDBUtil().getDatabaseInstance(this);
+        Document doc = db.createDocument();
+        Map<String, Object> properties = new HashMap<>();
+        properties.put("to", phone);
+        properties.put("from", PreferenceManager.getDefaultSharedPreferences(this).getString(GlobalUtil.PHONE_NUM_KEY, ""));
+        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.ROOT);
+        String current = sdf.format(new Date());
+        properties.put("datetime", current);
+        properties.put("message", "");
+        properties.put("name", PreferenceManager.getDefaultSharedPreferences(this).getString(GlobalUtil.USER_NAME_KEY, null));
+        try {
+            doc.putProperties(properties);
+        } catch (CouchbaseLiteException e) {
+            e.printStackTrace();
+        }*/
+        //mNavigationDrawerFragment.setUp(R.id.navigation_drawer, (DrawerLayout) findViewById(R.id.drawer_layout));
     }
 
     @Override
