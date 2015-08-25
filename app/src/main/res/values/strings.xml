@@ -11,4 +11,16 @@
     <string name="action_example">Example action</string>
 
     <string name="action_settings">Settings</string>
+    <string name="pref_user_profile">User profile</string>
+    <string name="pref_user_name">User name</string>
+    <string name="pref_user_name_summary">Name visible in the app</string>
+    <string name="pref_phone_num">Phone number</string>
+    <string name="pref_phone_num_summary">Phone number with area code (ex. +385991234567)</string>
+    <string name="message_hint">Type a message in</string>
+    <string name="send">Send</string>
+    <string name="save">Save</string>
+    <string name="phone_num_not_valid">Phone number not valid</string>
+    <string name="phone_num_hint">(eg. +385991234567)</string>
+    <string name="add_conversation">New conversation</string>
+    <string name="update_profile_name">Update your name in the settings menu</string>
 </resources>

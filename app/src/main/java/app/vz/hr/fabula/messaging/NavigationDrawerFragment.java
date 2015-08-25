@@ -1,14 +1,14 @@
 package app.vz.hr.fabula.messaging;
 
 import android.app.Activity;
-import android.support.v7.app.ActionBar;
-import android.support.v4.app.Fragment;
-import android.support.v4.view.GravityCompat;
-import android.support.v4.widget.DrawerLayout;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.v4.app.Fragment;
+import android.support.v4.view.GravityCompat;
+import android.support.v4.widget.DrawerLayout;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.LayoutInflater;
@@ -22,17 +22,15 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.Toast;
 
-import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
-import com.couchbase.lite.Manager;
+import com.couchbase.lite.LiveQuery;
+import com.couchbase.lite.Query;
+import com.couchbase.lite.QueryEnumerator;
 import com.couchbase.lite.QueryRow;
-import com.couchbase.lite.android.AndroidContext;
-
-import java.io.IOException;
-import java.util.List;
 
 import app.vz.hr.fabula.R;
 import app.vz.hr.fabula.util.Conversation;
+import app.vz.hr.fabula.util.DBUtil;
 import app.vz.hr.fabula.util.GlobalUtil;
 
 /**
@@ -40,7 +38,7 @@ import app.vz.hr.fabula.util.GlobalUtil;
  * See the <a href="https://developer.android.com/design/patterns/navigation-drawer.html#Interaction">
  * design guidelines</a> for a complete explanation of the behaviors implemented here.
  */
-public class NavigationDrawerFragment extends Fragment {
+public class NavigationDrawerFragment extends Fragment implements LiveQuery.ChangeListener {
     /**
      * Remember the position of the selected item.
      */
@@ -69,10 +67,7 @@ public class NavigationDrawerFragment extends Fragment {
     private int mCurrentSelectedPosition = 0;
     private boolean mFromSavedInstanceState;
     private boolean mUserLearnedDrawer;
-    List<QueryRow> conversationList;
-
-    com.couchbase.lite.Database database;
-    Manager manager;
+    LiveQuery liveNamesQ;
 
     public NavigationDrawerFragment() {
     }
@@ -98,20 +93,19 @@ public class NavigationDrawerFragment extends Fragment {
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
-        mDrawerListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                selectItem(position);
-            }
-        });
-        if(getDatabaseInstance() != null)
-            conversationList = Conversation.getAllConversations(getDatabaseInstance());
-        String[] names = new String[conversationList.size()];
-        for (int i = 0; i < conversationList.size(); i++) {
-            QueryRow r = conversationList.get(i);
-            names[i] = r.getDocument().getProperty("name").toString();
+    }
+
+    private void refreshAdapter(QueryEnumerator rows){
+        if(rows == null)
+            return;
+        final String[] names = new String[rows.getCount()];
+        int i = 0;
+        while (rows.hasNext()){
+            QueryRow r = rows.next();
+            names[i] = r.getKey().toString();
         }
-        //ContactListAdapter adapter = new ContactListAdapter(getActivity(), android.R.layout.simple_list_item_1, android.R.id.text1, conversationList);
+        if(names.length == 0)
+            return;
         mDrawerListView.setAdapter(new ArrayAdapter<>(
                 getActionBar().getThemedContext(),
                 android.R.layout.simple_list_item_1,
@@ -120,6 +114,8 @@ public class NavigationDrawerFragment extends Fragment {
         mDrawerListView.setItemChecked(mCurrentSelectedPosition, true);
         // Indicate that this fragment would like to influence the set of actions in the action bar.
         setHasOptionsMenu(true);
+
+
     }
 
     @Override
@@ -206,6 +202,21 @@ public class NavigationDrawerFragment extends Fragment {
         });
 
         mDrawerLayout.setDrawerListener(mDrawerToggle);
+        Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity());
+        if(db == null)
+            return;
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        Query namesQuery = Conversation.getContactList(db, sp.getString(GlobalUtil.PHONE_NUM_KEY, "")).createQuery();
+        namesQuery.setGroupLevel(1);
+        liveNamesQ = namesQuery.toLiveQuery();
+        refreshAdapter(liveNamesQ.getRows());
+        liveNamesQ.addChangeListener(this);
+        mDrawerListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                selectItem(position);
+            }
+        });
     }
 
     private void selectItem(int position) {
@@ -217,8 +228,8 @@ public class NavigationDrawerFragment extends Fragment {
             mDrawerLayout.closeDrawer(mFragmentContainerView);
         }
         if (mCallbacks != null) {
-            if(conversationList != null)
-            mCallbacks.onNavigationDrawerItemSelected(conversationList.get(position).getDocumentId());
+            if(liveNamesQ != null)
+            mCallbacks.onNavigationDrawerItemSelected(liveNamesQ.getRows().getRow(position).getValue().toString(), liveNamesQ.getRows().getRow(position).getKey().toString());
         }
     }
 
@@ -291,6 +302,18 @@ public class NavigationDrawerFragment extends Fragment {
         return ((AppCompatActivity) getActivity()).getSupportActionBar();
     }
 
+    @Override
+    public void changed(final LiveQuery.ChangeEvent event) {
+        if(event.getSource().equals(this.liveNamesQ)){
+            getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    refreshAdapter(event.getRows());
+                }
+            });
+        }
+    }
+
     /**
      * Callbacks interface that all activities using this fragment must implement.
      */
@@ -298,33 +321,6 @@ public class NavigationDrawerFragment extends Fragment {
         /**
          * Called when an item in the navigation drawer is selected.
          */
-        void onNavigationDrawerItemSelected(String docID);
-    }
-
-    public Database getDatabaseInstance() {
-        if(this.manager == null){
-            getManagerInstance();
-        }
-        if (this.database == null) {
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
-            if(!sp.getString(GlobalUtil.DB_NAME_KEY, "miso").isEmpty())
-                try {
-                    this.database = manager.getDatabase(sp.getString(GlobalUtil.DB_NAME_KEY, "miso"));
-                } catch (CouchbaseLiteException e) {
-                    e.printStackTrace();
-                }
-        }
-        return database;
-    }
-    public Manager getManagerInstance(){
-        AndroidContext ctx = new AndroidContext(getActivity());
-        if (manager == null) {
-            try {
-                manager = new Manager(ctx, Manager.DEFAULT_OPTIONS);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        return manager;
+        void onNavigationDrawerItemSelected(String contactsPhone, String name);
     }
 }

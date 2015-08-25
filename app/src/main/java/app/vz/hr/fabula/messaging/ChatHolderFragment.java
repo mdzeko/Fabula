@@ -1,32 +1,66 @@
 package app.vz.hr.fabula.messaging;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.couchbase.lite.CouchbaseLiteException;
+import com.couchbase.lite.Database;
+import com.couchbase.lite.Document;
+import com.couchbase.lite.LiveQuery;
+import com.couchbase.lite.Query;
+import com.couchbase.lite.QueryEnumerator;
+import com.couchbase.lite.QueryRow;
+import com.couchbase.lite.replicator.Replication;
+
+import java.io.IOException;
+import java.net.URL;
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 import app.vz.hr.fabula.R;
+import app.vz.hr.fabula.util.Conversation;
+import app.vz.hr.fabula.util.DBUtil;
+import app.vz.hr.fabula.util.GlobalUtil;
 
 /**
  * A placeholder fragment containing a simple view.
  */
-public class ChatHolderFragment extends Fragment {
+public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeListener, View.OnClickListener {
     /**
      * The fragment argument representing the section number for this
      * fragment.
      */
-    private static final String DOCUMENT_ID = "document_id";
+    String phone;
+    String name;
+    private static final String CONTACTS_PHONE = "contacts_phone";
+    private static final String CONTACTS_NAME = "contacts_name";
+    LiveQuery liveMessages;
+    LinearLayout chatHolder;
+    EditText edtMessage;
+    SharedPreferences sp;
 
     /**
      * Returns a new instance of this fragment for the given section
      * number.
      */
-    public static ChatHolderFragment newInstance(String docID) {
+    public static ChatHolderFragment newInstance(String contactsPhone, String name) {
         ChatHolderFragment fragment = new ChatHolderFragment();
         Bundle args = new Bundle();
-        args.putString(DOCUMENT_ID, docID);
+        args.putString(CONTACTS_PHONE, contactsPhone);
+        args.putString(CONTACTS_NAME, name);
         fragment.setArguments(args);
         return fragment;
     }
@@ -43,7 +77,101 @@ public class ChatHolderFragment extends Fragment {
     @Override
     public void onAttach(Activity activity) {
         super.onAttach(activity);
-        ((ChatWindow) activity).onSectionAttached(
-                getArguments().getString(DOCUMENT_ID));
+        this.phone = getArguments().getString(CONTACTS_PHONE);
+        this.name = getArguments().getString(CONTACTS_NAME);
+        ((ChatWindow) activity).onSectionAttached(this.name);
+    }
+
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+        chatHolder = (LinearLayout) getActivity().findViewById(R.id.chatHolder);
+        edtMessage = (EditText) getActivity().findViewById(R.id.edtMessage);
+        ImageView sendButton = (ImageView) getActivity().findViewById(R.id.sendButton);
+        sendButton.setOnClickListener(this);
+
+        sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        try {
+            Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity());
+            URL remote = new URL("http://dzeko.iriscouch.com/" + getString(R.string.app_name).toLowerCase());
+            Replication push = db.createPushReplication(remote);
+            Replication pull = db.createPullReplication(remote);
+            push.setContinuous(true);
+            pull.setContinuous(true);
+            push.start();
+            pull.start();
+            Query messagesQuery = Conversation.getMessages(db, phone, sp.getString(GlobalUtil.PHONE_NUM_KEY, "")).createQuery();
+            messagesQuery.setLimit(300);
+            liveMessages = messagesQuery.toLiveQuery();
+            attachMessages(liveMessages.getRows());
+            liveMessages.addChangeListener(this);
+        } catch (IOException  e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void attachMessages(QueryEnumerator rows) {
+        if(rows == null)
+            return;
+        chatHolder.removeAllViews();
+        while (rows.hasNext()) {
+            QueryRow row = rows.next();
+            Document doc = row.getDocument();
+            if(doc.getProperty("to").toString().isEmpty() || doc.getProperty("from").toString().isEmpty() || doc.getProperty("datetime").toString().isEmpty())
+                return;
+            View msg;
+            if(doc.getProperty("from").equals(sp.getString(GlobalUtil.PHONE_NUM_KEY, "")))
+                msg = getActivity().getLayoutInflater().inflate(R.layout.my_message, null);
+            else
+                msg = getActivity().getLayoutInflater().inflate(R.layout.interlocutor_message, null);
+            if(msg instanceof TextView)
+                ((TextView) msg).setText(doc.getProperty("message").toString());
+            int index = chatHolder.getChildCount();
+            chatHolder.addView(msg, index);
+        }
+    }
+
+    @Override
+    public void changed(final LiveQuery.ChangeEvent event) {
+        if(event.getSource().equals(this.liveMessages))
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                attachMessages(event.getRows());
+            }
+        });
+    }
+
+    @Override
+    public void onClick(View v) {
+        switch (v.getId()){
+            case R.id.sendButton:
+                sendMessage();
+                break;
+        }
+    }
+
+    private void sendMessage() {
+        if(edtMessage == null || edtMessage.getText().toString().isEmpty())
+            return;
+        if(sp.getString(GlobalUtil.USER_NAME_KEY, null) == null){
+            Toast.makeText(getActivity(), R.string.update_profile_name, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity());
+        Document doc = db.createDocument();
+        Map<String, Object> properties = new HashMap<>();
+        properties.put("to", phone);
+        properties.put("from", sp.getString(GlobalUtil.PHONE_NUM_KEY, ""));
+        String current = DateFormat.getDateTimeInstance(DateFormat.DEFAULT, DateFormat.FULL).format(new Date());
+        properties.put("datetime", current);
+        properties.put("message", edtMessage.getText().toString());
+        properties.put("name", sp.getString(GlobalUtil.USER_NAME_KEY, null));
+        try {
+            doc.putProperties(properties);
+        } catch (CouchbaseLiteException e) {
+            e.printStackTrace();
+        }
+        edtMessage.getText().clear();
     }
 }
