@@ -21,6 +21,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
+import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.LiveQuery;
 import com.couchbase.lite.Query;
@@ -32,7 +33,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 
 import app.vz.hr.fabula.R;
-import app.vz.hr.fabula.util.Conversation;
 import app.vz.hr.fabula.util.DBUtil;
 import app.vz.hr.fabula.util.GlobalUtil;
 
@@ -89,13 +89,18 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
             mFromSavedInstanceState = true;
         }
 
+
         // Select either the default item (0) or the last selected item.
-        selectItem(mCurrentSelectedPosition);
+        //selectItem(mCurrentSelectedPosition);
     }
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
+        if(mDrawerLayout == null) {
+            mDrawerLayout = (DrawerLayout) getActivity().findViewById(R.id.drawer_layout);
+            setUp(R.id.navigation_drawer, mDrawerLayout);
+        }
     }
 
     private void refreshAdapter(QueryEnumerator rows){
@@ -105,10 +110,14 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
         int i = 0;
         while (rows.hasNext()){
             QueryRow r = rows.next();
-            names[i] = r.getValue().toString().replace("[", "").replace("]", "");
+            if(r.getDocumentProperties().containsKey("conversation_name"))
+                names[i] = r.getDocumentProperties().get("conversation_name").toString();
         }
-        if(names.length == 0)
+        if(names.length == 0) {
+            /*View empty = getActivity().findViewById(R.id.txtEmpty);
+            mDrawerListView.setEmptyView(empty);*/
             return;
+        }
         mDrawerListView.setAdapter(new ArrayAdapter<>(
                 getActionBar().getThemedContext(),
                 android.R.layout.simple_list_item_1,
@@ -205,22 +214,22 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
         });
 
         mDrawerLayout.setDrawerListener(mDrawerToggle);
-        Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity());
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity(), "db" + sp.getString(GlobalUtil.PHONE_NUM_KEY, "").replace("+", ""));
         if(db == null)
             return;
         try {
-            URL remote = new URL("http://dzeko.iriscouch.com/" + getString(R.string.app_name).toLowerCase());
+            URL remote = new URL(GlobalUtil.SERVER_URL + "db" + sp.getString(GlobalUtil.PHONE_NUM_KEY, "").replace("+", ""));
             Replication pull = db.getActiveReplicator(remote, false);
             if(pull == null) {
                 pull = db.createPullReplication(remote);
                 pull.setContinuous(true);
                 pull.start();
             }
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
-            Query namesQuery = Conversation.getContactList(db, sp.getString(GlobalUtil.PHONE_NUM_KEY, "")).createQuery();
-            namesQuery.setGroupLevel(1);
-            liveNamesQ = namesQuery.toLiveQuery();
-            refreshAdapter(liveNamesQ.getRows());
+
+            Query namesQuery = db.createAllDocumentsQuery();//Conversation.getConversations(db).createQuery();
+            //liveNamesQ = namesQuery.toLiveQuery();
+            refreshAdapter(namesQuery.run());
             liveNamesQ.addChangeListener(this);
             mDrawerListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
@@ -228,7 +237,7 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
                     selectItem(position);
                 }
             });
-        } catch (MalformedURLException e) {
+        } catch (MalformedURLException | CouchbaseLiteException e) {
             e.printStackTrace();
         }
     }
@@ -243,7 +252,7 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
         }
         if (mCallbacks != null) {
             if(liveNamesQ != null)
-            mCallbacks.onNavigationDrawerItemSelected(liveNamesQ.getRows().getRow(position).getValue().toString(), liveNamesQ.getRows().getRow(position).getKey().toString());
+            mCallbacks.onNavigationDrawerItemSelected(liveNamesQ.getRows().getRow(position).getKey().toString(), liveNamesQ.getRows().getRow(position).getValue().toString());
         }
     }
 
@@ -334,6 +343,6 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
         /**
          * Called when an item in the navigation drawer is selected.
          */
-        void onNavigationDrawerItemSelected(String contactsPhone, String name);
+        void onNavigationDrawerItemSelected(String contactsPhone, String conversation);
     }
 }

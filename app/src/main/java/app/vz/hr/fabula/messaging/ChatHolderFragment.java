@@ -23,6 +23,9 @@ import com.couchbase.lite.QueryEnumerator;
 import com.couchbase.lite.QueryRow;
 import com.couchbase.lite.replicator.Replication;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
@@ -44,10 +47,10 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
      * The fragment argument representing the section number for this
      * fragment.
      */
-    String phone;
-    String name;
+    String contactsPhone;
+    JSONObject conversation;
     private static final String CONTACTS_PHONE = "contacts_phone";
-    private static final String CONTACTS_NAME = "contacts_name";
+    private static final String CONVERSATION = "conversation";
     LiveQuery liveMessages;
     LinearLayout chatHolder;
     EditText edtMessage;
@@ -57,11 +60,11 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
      * Returns a new instance of this fragment for the given section
      * number.
      */
-    public static ChatHolderFragment newInstance(String contactsPhone, String name) {
+    public static ChatHolderFragment newInstance(String contactsPhone, JSONObject conversation) {
         ChatHolderFragment fragment = new ChatHolderFragment();
         Bundle args = new Bundle();
         args.putString(CONTACTS_PHONE, contactsPhone);
-        args.putString(CONTACTS_NAME, name);
+        args.putString(CONVERSATION, conversation.toString());
         fragment.setArguments(args);
         return fragment;
     }
@@ -72,29 +75,22 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        return inflater.inflate(R.layout.fragment_chat, container, false);
-    }
-
-    @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        this.phone = getArguments().getString(CONTACTS_PHONE);
-        this.name = getArguments().getString(CONTACTS_NAME);
-        ((ChatWindow) activity).onSectionAttached(this.name);
-    }
-
-    @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        super.onActivityCreated(savedInstanceState);
-        chatHolder = (LinearLayout) getActivity().findViewById(R.id.chatHolder);
-        edtMessage = (EditText) getActivity().findViewById(R.id.edtMessage);
-        ImageView sendButton = (ImageView) getActivity().findViewById(R.id.sendButton);
-        sendButton.setOnClickListener(this);
+        View root = inflater.inflate(R.layout.fragment_chat, container, false);
+        this.contactsPhone = getArguments().getString(CONTACTS_PHONE);
+        String conv = getArguments().getString(CONVERSATION);
+        try {
+            this.conversation = new JSONObject(conv);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        chatHolder = (LinearLayout) root.findViewById(R.id.chatHolder);
+        edtMessage = (EditText) root.findViewById(R.id.edtMessage);
 
         sp = PreferenceManager.getDefaultSharedPreferences(getActivity());
+
         try {
-            Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity());
-            URL remote = new URL("http://dzeko.iriscouch.com/" + getString(R.string.app_name).toLowerCase());
+            Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity(), conversation.getString("database_name"));
+            URL remote = new URL(GlobalUtil.SERVER_URL + getString(R.string.app_name).toLowerCase());
             Replication push = db.createPushReplication(remote);
             push.setContinuous(true);
             Replication pull = db.getActiveReplicator(remote, false);
@@ -104,28 +100,50 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
                 pull.start();
             }
             push.start();
-            Query messagesQuery = Conversation.getMessages(db, phone, sp.getString(GlobalUtil.PHONE_NUM_KEY, "")).createQuery();
+            Query messagesQuery = Conversation.getMessages(db).createQuery();
             messagesQuery.setLimit(300);
             messagesQuery.setDescending(false);
             liveMessages = messagesQuery.toLiveQuery();
             attachMessages(liveMessages.getRows());
             liveMessages.addChangeListener(this);
-        } catch (IOException  e) {
+        } catch (IOException | JSONException e) {
+            e.printStackTrace();
+        }
+        return root;
+    }
+
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+        try {
+            if(conversation != null) {
+                String name = conversation.getString("conversation_name");
+                ((ChatWindow) activity).onSectionAttached(name);
+            }
+        } catch (JSONException e) {
             e.printStackTrace();
         }
     }
 
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+        ImageView sendButton = (ImageView) getActivity().findViewById(R.id.sendButton);
+        sendButton.setOnClickListener(this);
+
+    }
+
     private void attachMessages(QueryEnumerator rows) {
-        if(rows == null)
+        if(rows == null || rows.getCount() == 0)
             return;
         chatHolder.removeAllViews();
         while (rows.hasNext()) {
             QueryRow row = rows.next();
             Document doc = row.getDocument();
-            if(doc.getProperty("to").toString().isEmpty() || doc.getProperty("from").toString().isEmpty() || doc.getProperty("datetime").toString().isEmpty())
+            if(doc == null || doc.getProperty("to").toString().isEmpty() || doc.getProperty("from").toString().isEmpty() || doc.getProperty("datetime").toString().isEmpty())
                 return;
             View msg;
-            if(doc.getProperty("from").equals(sp.getString(GlobalUtil.PHONE_NUM_KEY, "")))
+            if(doc.getProperty("from_phone").equals(sp.getString(GlobalUtil.PHONE_NUM_KEY, "")))
                 msg = getActivity().getLayoutInflater().inflate(R.layout.my_message, null);
             else
                 msg = getActivity().getLayoutInflater().inflate(R.layout.interlocutor_message, null);
@@ -164,16 +182,23 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
             Toast.makeText(getActivity(), R.string.update_profile_name, Toast.LENGTH_SHORT).show();
             return;
         }
-        Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity());
+        String dbName;
+        try {
+            dbName = conversation.getString("database_name");
+        } catch (JSONException e) {
+            e.printStackTrace();
+            dbName = "";
+        }
+        Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity(), dbName);
         Document doc = db.createDocument();
         Map<String, Object> properties = new HashMap<>();
-        properties.put("to", phone);
-        properties.put("from", sp.getString(GlobalUtil.PHONE_NUM_KEY, ""));
+        properties.put("to", dbName);
+        properties.put("from", sp.getString(GlobalUtil.USER_NAME_KEY, ""));
+        properties.put("from_phone", sp.getString(GlobalUtil.PHONE_NUM_KEY, ""));
         SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.ROOT);
         String current = sdf.format(new Date());
         properties.put("datetime", current);
         properties.put("message", edtMessage.getText().toString());
-        properties.put("name", sp.getString(GlobalUtil.USER_NAME_KEY, null));
         properties.put("timestamp", System.currentTimeMillis() / 1000L);
         try {
             doc.putProperties(properties);

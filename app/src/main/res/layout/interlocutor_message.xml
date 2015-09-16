@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/interluctorMessage"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:layout_gravity="bottom|left"
@@ -12,5 +11,4 @@
     android:layout_marginRight="100dp"
     android:background="@drawable/others_bubble"
     android:layout_marginTop="5dp"
-    android:layout_marginBottom="5dp"
-    tools:showIn="@layout/fragment_chat" />
+    android:layout_marginBottom="5dp"/>

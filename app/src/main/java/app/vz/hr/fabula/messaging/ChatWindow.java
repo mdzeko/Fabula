@@ -3,7 +3,9 @@ package app.vz.hr.fabula.messaging;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBar;
@@ -13,10 +15,27 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.couchbase.lite.Database;
+import com.couchbase.lite.replicator.Replication;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.concurrent.ExecutionException;
 
 import app.vz.hr.fabula.R;
 import app.vz.hr.fabula.UserPreferenceActivity;
+import app.vz.hr.fabula.async_requests.GETRequest;
+import app.vz.hr.fabula.async_requests.PUTRequest;
 import app.vz.hr.fabula.util.DBUtil;
+import app.vz.hr.fabula.util.GlobalUtil;
+import app.vz.hr.fabula.util.JSONParse;
 
 
 public class ChatWindow extends AppCompatActivity
@@ -41,6 +60,22 @@ public class ChatWindow extends AppCompatActivity
                 getSupportFragmentManager().findFragmentById(R.id.navigation_drawer);
         mTitle = getTitle();
 
+
+
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
+        Database db = DBUtil.getDBUtil().getDatabaseInstance(this, "db" + sp.getString(GlobalUtil.PHONE_NUM_KEY, "").replace("+", ""));
+        URL remote;
+        try {
+            remote = new URL(GlobalUtil.SERVER_URL + "db" + sp.getString(GlobalUtil.PHONE_NUM_KEY, "").replace("+", ""));
+            Replication pull = db.createPullReplication(remote);
+            pull.setCreateTarget(true);
+            pull.setContinuous(true);
+            pull.start();
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        }
+
+
         // Set up the drawer.
         //helloCBL();
         mNavigationDrawerFragment.setUp(
@@ -49,13 +84,16 @@ public class ChatWindow extends AppCompatActivity
     }
 
     @Override
-    public void onNavigationDrawerItemSelected(String contactsPhone, String name) {
-        contactsPhone = contactsPhone.replace("[", "");
-        contactsPhone = contactsPhone.replace("]", "");
-        // update the main content by replacing fragments
+    public void onNavigationDrawerItemSelected(String contactsPhone, String conversation) {
+        JSONObject conv;
+        try {
+            conv = new JSONObject(conversation);
+        } catch (JSONException e) {
+            conv = new JSONObject();
+        }
         FragmentManager fragmentManager = getSupportFragmentManager();
         fragmentManager.beginTransaction()
-                .replace(R.id.container, ChatHolderFragment.newInstance(contactsPhone, name))
+                .replace(R.id.container, ChatHolderFragment.newInstance(contactsPhone, conv))
                 .commit();
     }
 
@@ -106,8 +144,9 @@ public class ChatWindow extends AppCompatActivity
                 @Override
                 public void onClick(DialogInterface dialog, int which) {
                     EditText etPhone = (EditText) dialogView.findViewById(R.id.new_conversation_phone);
+                    TextView txtMessage = (TextView) dialogView.findViewById(R.id.txtLoadingMessage);
                     if (!etPhone.getText().toString().isEmpty() && PhoneNumberUtils.isGlobalPhoneNumber(etPhone.getText().toString()))
-                        addConversation(etPhone.getText().toString());
+                        newConversation(etPhone.getText().toString(), txtMessage);
                 }
             });
             builder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
@@ -123,24 +162,74 @@ public class ChatWindow extends AppCompatActivity
         return super.onOptionsItemSelected(item);
     }
 
-    private void addConversation(String phone) {
-        onNavigationDrawerItemSelected(phone, phone);
-        /*Database db = DBUtil.getDBUtil().getDatabaseInstance(this);
-        Document doc = db.createDocument();
-        Map<String, Object> properties = new HashMap<>();
-        properties.put("to", phone);
-        properties.put("from", PreferenceManager.getDefaultSharedPreferences(this).getString(GlobalUtil.PHONE_NUM_KEY, ""));
-        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.ROOT);
-        String current = sdf.format(new Date());
-        properties.put("datetime", current);
-        properties.put("message", "");
-        properties.put("name", PreferenceManager.getDefaultSharedPreferences(this).getString(GlobalUtil.USER_NAME_KEY, null));
+    private void newConversation(String phone, TextView message) {
+        String contactName;
+        GETRequest task = new GETRequest(message);
+        task.execute(GlobalUtil.SERVER_URL + "db" + phone.toLowerCase().replace("+", ""));
         try {
-            doc.putProperties(properties);
-        } catch (CouchbaseLiteException e) {
+            if(JSONParse.DBExistsByName(task.get())){
+                task = new GETRequest(message);
+                task.execute(GlobalUtil.SERVER_URL + "db" + phone.toLowerCase().replace("+", "") + "/meta");
+                JSONObject userData = new JSONObject(task.get());
+                if(!userData.has("user_name")) {
+                    message.setText(R.string.user_profile_error);
+                    return;
+                }
+                contactName = userData.getString("user_name");
+                message.setText(contactName);
+            }
+            else {
+                message.setText(R.string.user_does_not_exist);
+                return;
+            }
+        } catch (InterruptedException | ExecutionException | JSONException e) {
             e.printStackTrace();
-        }*/
-        //mNavigationDrawerFragment.setUp(R.id.navigation_drawer, (DrawerLayout) findViewById(R.id.drawer_layout));
+            Toast.makeText(this, R.string.unexpected_error, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            String myPhone = PreferenceManager.getDefaultSharedPreferences(this).getString(GlobalUtil.PHONE_NUM_KEY, "");
+            String myName = PreferenceManager.getDefaultSharedPreferences(this).getString(GlobalUtil.USER_NAME_KEY, "");
+            String dbName = GlobalUtil.digestString(phone + myPhone);
+            dbName = "db"+dbName;
+
+            JSONObject myNewConv = new JSONObject();
+            JSONObject contactNewConv = new JSONObject();
+
+            JSONArray myParticipants = new JSONArray();
+            JSONObject participant = new JSONObject();
+            participant.put("phone", phone);
+            participant.put("name", contactName);
+
+            myParticipants.put(participant);
+            myNewConv.put("participants", myParticipants);
+            myNewConv.put("conversation_name", GlobalUtil.makeConvName(myParticipants));
+
+
+            JSONArray contactParticipants = new JSONArray();
+            JSONObject meParticipant = new JSONObject();
+            meParticipant.put("phone", myPhone);
+            meParticipant.put("name", myName);
+
+            contactParticipants.put(meParticipant);
+            contactNewConv.put("participants", contactParticipants);
+            contactNewConv.put("conversation_name", GlobalUtil.makeConvName(contactParticipants));
+
+            myNewConv.put("database_name", dbName);
+            contactNewConv.put("database_name", dbName);
+
+            PUTRequest newConvParticipant = new PUTRequest(GlobalUtil.SERVER_URL + "db" + phone.toLowerCase().replace("+", ""));
+            newConvParticipant.execute(contactNewConv.toString(), myPhone.replace("+", ""));
+            PUTRequest newConvMe = new PUTRequest(GlobalUtil.SERVER_URL + "db" + myPhone.toLowerCase().replace("+", ""));
+            newConvMe.execute(myNewConv.toString(), phone.replace("+", ""));
+
+            PUTRequest convDB = new PUTRequest(GlobalUtil.SERVER_URL + dbName);
+            convDB.execute();
+
+            onNavigationDrawerItemSelected(phone, myNewConv.toString());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -148,4 +237,5 @@ public class ChatWindow extends AppCompatActivity
         super.onDestroy();
         DBUtil.getDBUtil().getManagerInstance(this).close();
     }
+
 }

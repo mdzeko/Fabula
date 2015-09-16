@@ -8,10 +8,9 @@ import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.Manager;
 import com.couchbase.lite.android.AndroidContext;
+import com.couchbase.lite.util.Base64;
 
 import java.io.IOException;
-
-import app.vz.hr.fabula.R;
 
 /**
  * Created by miso on 8/23/15
@@ -27,14 +26,19 @@ public class DBUtil {
             util = new DBUtil();
         return util;
     }
-    public Database getDatabaseInstance(Context ctx) {
+
+    public static String addAuthentication(){
+        return "Basic " + Base64.encodeToString("mdzeko:7UBek4NA".getBytes(), Base64.NO_WRAP);
+    }
+
+    public Database getDatabaseInstance(Context ctx, String dbName) {
         if(this.manager == null){
             getManagerInstance(ctx);
         }
         if (this.database == null) {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(ctx);
             try {
-                this.database = manager.getDatabase(sp.getString(GlobalUtil.DB_NAME_KEY, ctx.getString(R.string.app_name).toLowerCase()));
+                this.database = manager.getDatabase(sp.getString(GlobalUtil.DB_NAME_KEY, dbName.toLowerCase()));
             } catch (CouchbaseLiteException e) {
                 e.printStackTrace();
             }

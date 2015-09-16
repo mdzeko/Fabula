@@ -25,4 +25,13 @@
     <string name="update_profile_name">Update your name in the settings menu</string>
     <string name="create">Create</string>
     <string name="cancel">Cancel</string>
+    <string name="login_register">Login/Register</string>
+    <string name="error_in_request">Request error</string>
+    <string name="unknown">Unknown</string>
+    <string name="no_conversations">No conversations</string>
+    <string name="loading">Loading…</string>
+    <string name="done">Done</string>
+    <string name="user_profile_error">User hasn\'t defined his profile to receive messages</string>
+    <string name="unexpected_error">Unexpected error while creating new conversation</string>
+    <string name="user_does_not_exist">User with that phone is not registered</string>
 </resources>

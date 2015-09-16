@@ -1,18 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="vertical" android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <EditText
+    <com.beardedhen.androidbootstrap.BootstrapEditText
         android:id="@+id/input_phone"
         android:layout_width="match_parent"
         android:inputType="phone"
         android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        app:be_roundedCorners="true"
+        android:layout_margin="5dp"
         android:hint="@string/phone_num_hint"/>
-    <Button
+
+    <com.beardedhen.androidbootstrap.BootstrapEditText
+        android:id="@+id/input_name"
+        android:layout_width="match_parent"
+        android:inputType="textPersonName"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        app:be_roundedCorners="true"
+        android:layout_margin="5dp"
+        android:hint="@string/pref_user_name"/>
+
+    <com.beardedhen.androidbootstrap.BootstrapButton
         android:id="@+id/save_button"
+        android:layout_gravity="bottom"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/save"/>
+        app:bb_roundedCorners="true"
+        android:textSize="17sp"
+        app:bb_type="primary"
+        android:layout_margin="5dp"
+        android:text="@string/login_register"/>
 
 </LinearLayout>
