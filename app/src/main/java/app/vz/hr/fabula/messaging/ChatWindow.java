@@ -3,7 +3,6 @@ package app.vz.hr.fabula.messaging;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentManager;
@@ -18,15 +17,10 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.couchbase.lite.Database;
-import com.couchbase.lite.replicator.Replication;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.concurrent.ExecutionException;
 
 import app.vz.hr.fabula.R;
@@ -62,7 +56,7 @@ public class ChatWindow extends AppCompatActivity
 
 
 
-        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
+        /*SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
         Database db = DBUtil.getDBUtil().getDatabaseInstance(this, "db" + sp.getString(GlobalUtil.PHONE_NUM_KEY, "").replace("+", ""));
         URL remote;
         try {
@@ -73,7 +67,7 @@ public class ChatWindow extends AppCompatActivity
             pull.start();
         } catch (MalformedURLException e) {
             e.printStackTrace();
-        }
+        }*/
 
 
         // Set up the drawer.

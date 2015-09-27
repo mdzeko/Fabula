@@ -54,9 +54,9 @@ public class Conversation {
         messagesView.setMap(new Mapper() {
             @Override
             public void map(Map<String, Object> document, Emitter emitter) {
-                //if((document.get("to").equals(contact) && document.get("from").equals(myPhone)) || (document.get("from").equals(contact) && document.get("to").equals(myPhone))){
+                if(document.containsKey("timestamp")){
                     emitter.emit(document.get("timestamp"), document);
-                //}
+                }
             }
         }, "2");
         return messagesView;

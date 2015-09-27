@@ -2,16 +2,18 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="vertical" android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:padding="10dp"
+    android:background="#e3e3e3"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <com.beardedhen.androidbootstrap.BootstrapEditText
         android:id="@+id/input_phone"
         android:layout_width="match_parent"
         android:inputType="phone"
+        android:padding="10dp"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        app:be_roundedCorners="true"
-        android:layout_margin="5dp"
+        app:be_roundedCorners="false"
         android:hint="@string/phone_num_hint"/>
 
     <com.beardedhen.androidbootstrap.BootstrapEditText
@@ -20,9 +22,10 @@
         android:inputType="textPersonName"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        app:be_roundedCorners="true"
-        android:layout_margin="5dp"
-        android:hint="@string/pref_user_name"/>
+        android:padding="10dp"
+        android:layout_marginTop="2dp"
+        app:be_roundedCorners="false"
+        android:hint="@string/name"/>
 
     <com.beardedhen.androidbootstrap.BootstrapButton
         android:id="@+id/save_button"
@@ -31,8 +34,8 @@
         android:layout_height="wrap_content"
         app:bb_roundedCorners="true"
         android:textSize="17sp"
+        android:layout_marginTop="10dp"
         app:bb_type="primary"
-        android:layout_margin="5dp"
         android:text="@string/login_register"/>
 
 </LinearLayout>

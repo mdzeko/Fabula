@@ -35,13 +35,11 @@ public class DBUtil {
         if(this.manager == null){
             getManagerInstance(ctx);
         }
-        if (this.database == null) {
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(ctx);
-            try {
-                this.database = manager.getDatabase(sp.getString(GlobalUtil.DB_NAME_KEY, dbName.toLowerCase()));
-            } catch (CouchbaseLiteException e) {
-                e.printStackTrace();
-            }
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(ctx);
+        try {
+            this.database = manager.getDatabase(sp.getString(GlobalUtil.DB_NAME_KEY, dbName.toLowerCase()));
+        } catch (CouchbaseLiteException e) {
+            e.printStackTrace();
         }
         return database;
     }

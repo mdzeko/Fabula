@@ -11,20 +11,15 @@ import android.widget.Toast;
 
 import com.beardedhen.androidbootstrap.BootstrapButton;
 import com.beardedhen.androidbootstrap.BootstrapEditText;
-import com.couchbase.lite.Database;
-import com.couchbase.lite.replicator.Replication;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.concurrent.ExecutionException;
 
 import app.vz.hr.fabula.async_requests.GETRequest;
 import app.vz.hr.fabula.async_requests.PUTRequest;
 import app.vz.hr.fabula.messaging.ChatWindow;
-import app.vz.hr.fabula.util.DBUtil;
 import app.vz.hr.fabula.util.GlobalUtil;
 import app.vz.hr.fabula.util.JSONParse;
 
@@ -76,14 +71,7 @@ public class Login extends Activity implements View.OnClickListener {
     public void responsePositive(boolean positive) {
         boolean ok = positive;
         try {
-            Database db = DBUtil.getDBUtil().getDatabaseInstance(this, "db" + ETPhone.getText().toString().toLowerCase().replace("+", ""));
-            URL remote;
-            remote = new URL(GlobalUtil.SERVER_URL + "db" + ETPhone.getText().toString().toLowerCase().replace("+", ""));
             if(positive) {
-                Replication pull = db.createPullReplication(remote);
-                pull.setCreateTarget(true);
-                pull.setContinuous(true);
-                pull.start();
                 SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);
                 sp.edit().putString(GlobalUtil.PHONE_NUM_KEY, ETPhone.getText().toString()).apply();
                 sp.edit().putString(GlobalUtil.USER_NAME_KEY, ETName.getText().toString()).apply();
@@ -96,8 +84,9 @@ public class Login extends Activity implements View.OnClickListener {
                 task.execute(data.toString(), "meta");
                 ok = JSONParse.responseOK(task.get());
             }
-        } catch (MalformedURLException | JSONException | ExecutionException | InterruptedException e) {
+        } catch (JSONException | ExecutionException | InterruptedException e) {
             e.printStackTrace();
+            ok = false;
         }
         if(ok) {
             SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(this);

@@ -90,7 +90,7 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
 
         try {
             Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity(), conversation.getString("database_name"));
-            URL remote = new URL(GlobalUtil.SERVER_URL + getString(R.string.app_name).toLowerCase());
+            URL remote = new URL(GlobalUtil.SERVER_URL + conversation.getString("database_name"));
             Replication push = db.createPushReplication(remote);
             push.setContinuous(true);
             Replication pull = db.getActiveReplicator(remote, false);
@@ -104,7 +104,6 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
             messagesQuery.setLimit(300);
             messagesQuery.setDescending(false);
             liveMessages = messagesQuery.toLiveQuery();
-            attachMessages(liveMessages.getRows());
             liveMessages.addChangeListener(this);
         } catch (IOException | JSONException e) {
             e.printStackTrace();
@@ -130,7 +129,8 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
         super.onActivityCreated(savedInstanceState);
         ImageView sendButton = (ImageView) getActivity().findViewById(R.id.sendButton);
         sendButton.setOnClickListener(this);
-
+        if(liveMessages != null)
+            attachMessages(liveMessages.getRows());
     }
 
     private void attachMessages(QueryEnumerator rows) {
@@ -140,7 +140,7 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
         while (rows.hasNext()) {
             QueryRow row = rows.next();
             Document doc = row.getDocument();
-            if(doc == null || doc.getProperty("to").toString().isEmpty() || doc.getProperty("from").toString().isEmpty() || doc.getProperty("datetime").toString().isEmpty())
+            if(doc == null || doc.getProperty("to") == null || doc.getProperty("from") == null || doc.getProperty("datetime").toString().isEmpty())
                 return;
             View msg;
             if(doc.getProperty("from_phone").equals(sp.getString(GlobalUtil.PHONE_NUM_KEY, "")))
@@ -158,12 +158,12 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
     public void changed(final LiveQuery.ChangeEvent event) {
         if(liveMessages != null)
         if(event.getSource().equals(this.liveMessages))
-        getActivity().runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                attachMessages(event.getRows());
-            }
-        });
+            getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    attachMessages(event.getRows());
+                }
+            });
     }
 
     @Override
@@ -189,6 +189,8 @@ public class ChatHolderFragment extends Fragment implements LiveQuery.ChangeList
             e.printStackTrace();
             dbName = "";
         }
+        if(dbName.isEmpty())
+            this.onDestroy();
         Database db = DBUtil.getDBUtil().getDatabaseInstance(getActivity(), dbName);
         Document doc = db.createDocument();
         Map<String, Object> properties = new HashMap<>();

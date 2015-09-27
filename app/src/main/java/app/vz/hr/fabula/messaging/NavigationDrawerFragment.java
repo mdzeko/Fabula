@@ -18,10 +18,8 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.ListView;
 
-import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
 import com.couchbase.lite.LiveQuery;
 import com.couchbase.lite.Query;
@@ -31,8 +29,12 @@ import com.couchbase.lite.replicator.Replication;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
 import app.vz.hr.fabula.R;
+import app.vz.hr.fabula.util.ContactListAdapter;
+import app.vz.hr.fabula.util.Conversation;
 import app.vz.hr.fabula.util.DBUtil;
 import app.vz.hr.fabula.util.GlobalUtil;
 
@@ -88,8 +90,6 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
             mCurrentSelectedPosition = savedInstanceState.getInt(STATE_SELECTED_POSITION);
             mFromSavedInstanceState = true;
         }
-
-
         // Select either the default item (0) or the last selected item.
         //selectItem(mCurrentSelectedPosition);
     }
@@ -106,28 +106,24 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
     private void refreshAdapter(QueryEnumerator rows){
         if(rows == null)
             return;
-        final String[] names = new String[rows.getCount()];
-        int i = 0;
+        final List<String> names = new ArrayList<>();
         while (rows.hasNext()){
             QueryRow r = rows.next();
-            if(r.getDocumentProperties().containsKey("conversation_name"))
-                names[i] = r.getDocumentProperties().get("conversation_name").toString();
+            Object name = r.getDocument().getProperty("conversation_name");
+            if(name != null && !name.toString().isEmpty())
+                names.add(r.getDocument().getProperty("conversation_name").toString());
         }
-        if(names.length == 0) {
-            /*View empty = getActivity().findViewById(R.id.txtEmpty);
-            mDrawerListView.setEmptyView(empty);*/
+        if(names.size() == 0) {
             return;
         }
-        mDrawerListView.setAdapter(new ArrayAdapter<>(
-                getActionBar().getThemedContext(),
+        mDrawerListView.setAdapter(new ContactListAdapter(
+                getActivity(),
                 android.R.layout.simple_list_item_1,
                 android.R.id.text1,
                 names));
         mDrawerListView.setItemChecked(mCurrentSelectedPosition, true);
         // Indicate that this fragment would like to influence the set of actions in the action bar.
         setHasOptionsMenu(true);
-
-
     }
 
     @Override
@@ -227,9 +223,9 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
                 pull.start();
             }
 
-            Query namesQuery = db.createAllDocumentsQuery();//Conversation.getConversations(db).createQuery();
-            //liveNamesQ = namesQuery.toLiveQuery();
-            refreshAdapter(namesQuery.run());
+            Query namesQuery = Conversation.getConversations(db).createQuery();
+            liveNamesQ = namesQuery.toLiveQuery();
+            refreshAdapter(liveNamesQ.getRows());
             liveNamesQ.addChangeListener(this);
             mDrawerListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
@@ -237,7 +233,7 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
                     selectItem(position);
                 }
             });
-        } catch (MalformedURLException | CouchbaseLiteException e) {
+        } catch (MalformedURLException e) {
             e.printStackTrace();
         }
     }
@@ -251,7 +247,7 @@ public class NavigationDrawerFragment extends Fragment implements LiveQuery.Chan
             mDrawerLayout.closeDrawer(mFragmentContainerView);
         }
         if (mCallbacks != null) {
-            if(liveNamesQ != null)
+            if(liveNamesQ != null && liveNamesQ.getRows() != null)
             mCallbacks.onNavigationDrawerItemSelected(liveNamesQ.getRows().getRow(position).getKey().toString(), liveNamesQ.getRows().getRow(position).getValue().toString());
         }
     }
